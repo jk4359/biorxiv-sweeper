@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bioRxiv Sweeper</title>
+<style>
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0;background:#FCFCFC;}
+  [data-theme="light"]{--bg:#FCFCFC;--alt:#F2F2F2;--ink:#191919;--ink2:#4D4D4D;--ink3:#8A8A8A;--line:#D9D9D9;--line-strong:#191919;}
+  [data-theme="dark"]{--bg:#191919;--alt:#242424;--ink:#FCFCFC;--ink2:#C9C9C9;--ink3:#8A8A8A;--line:#3A3A3A;--line-strong:#FCFCFC;}
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){--bg:#191919;--alt:#242424;--ink:#FCFCFC;--ink2:#C9C9C9;--ink3:#8A8A8A;--line:#3A3A3A;--line-strong:#FCFCFC;} }
+  body{background:var(--bg);color:var(--ink);}
+  .ui{font-family:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif;}
+
+  /* ---------- config screen ---------- */
+  .config{max-width:760px;margin:0 auto;padding:40px 28px 80px;font-family:'Outfit',system-ui,-apple-system,'Segoe UI',sans-serif;}
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:6px;}
+  .brand .dot{width:13px;height:13px;border-radius:50%;background:var(--ink);display:inline-block;}
+  .brand .name{font-weight:700;font-size:19px;letter-spacing:-0.01em;}
+  .brand .name span{color:var(--ink3);font-weight:500;}
+  .tagline{color:var(--ink2);font-size:14px;line-height:1.55;margin:0 0 26px;max-width:60ch;}
+  .field{margin-bottom:22px;}
+  .field > label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;font-weight:600;}
+  .row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;}
+  input[type=text],input[type=password],input[type=number]{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);padding:9px 11px;border-radius:0;width:100%;}
+  input[type=number]{width:88px;}
+  .seg{display:inline-flex;border:1px solid var(--line-strong);}
+  .seg label{padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink2);}
+  .seg label.on{background:var(--ink);color:var(--bg);}
+  .seg input{position:absolute;opacity:0;pointer-events:none;}
+  .keyrow{display:flex;gap:8px;align-items:center;}
+  .keyrow input{flex:1;}
+  button{font:inherit;border-radius:0;cursor:pointer;}
+  .btn{background:var(--ink);color:var(--bg);border:1px solid var(--line-strong);padding:10px 20px;font-size:14px;font-weight:600;letter-spacing:.01em;}
+  .btn:hover{opacity:.88;}
+  .btn.ghost{background:transparent;color:var(--ink);}
+  .btn.sm{padding:7px 13px;font-size:12px;}
+  .hint{font-size:11.5px;color:var(--ink3);margin-top:7px;line-height:1.5;}
+  .hint a{color:var(--ink2);}
+
+  .tree{border:1px solid var(--line);max-height:420px;overflow-y:auto;padding:6px 0;}
+  .grp{border-bottom:1px solid var(--line);}
+  .grp:last-child{border-bottom:none;}
+  .grp-head{display:flex;align-items:center;gap:9px;padding:9px 14px;font-weight:700;font-size:14px;position:sticky;top:0;background:var(--bg);}
+  .grp-head .cnt{margin-left:auto;font-size:11px;color:var(--ink3);font-weight:500;}
+  .cats{display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;padding:4px 14px 12px 34px;}
+  .cat{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);padding:3px 0;}
+  .cat input,.grp-head input{width:15px;height:15px;accent-color:var(--ink);cursor:pointer;flex-shrink:0;}
+  .toolbtns{display:flex;gap:8px;margin:10px 0 0;}
+  .selinfo{font-size:12px;color:var(--ink3);margin-top:10px;}
+
+  /* ---------- progress ---------- */
+  #progress{max-width:620px;margin:8vh auto;padding:0 28px;font-family:'Outfit',system-ui,sans-serif;text-align:center;}
+  #progress h2{font-size:20px;font-weight:700;margin:0 0 6px;}
+  #prog-phase{color:var(--ink2);font-size:13.5px;min-height:20px;margin-bottom:20px;}
+  .bar{height:10px;background:var(--alt);border:1px solid var(--line);overflow:hidden;}
+  .bar > i{display:block;height:100%;width:0;background:var(--ink);transition:width .25s ease;}
+  #prog-clock{font-size:11px;color:var(--ink3);margin-top:10px;font-variant-numeric:tabular-nums;letter-spacing:.03em;}
+  #prog-log{margin-top:26px;text-align:left;font-size:12px;color:var(--ink3);line-height:1.7;max-height:200px;overflow-y:auto;}
+
+  .err{background:#e34948;color:#fff;padding:12px 16px;font-size:13px;margin:16px 0;border-radius:2px;}
+  [hidden]{display:none!important;}
+
+  /* ---------- report (ported from the arXiv Sweeper design handoff) ---------- */
+  .report{display:flex;min-height:100vh;background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;}
+  .report .ui{font-family:'Outfit',system-ui,-apple-system,sans-serif;}
+  .prose a, .cite a{color:var(--ink);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:2px;text-decoration-color:var(--line);transition:background 120ms ease, text-decoration-color 120ms ease;border-radius:1px;padding:0 1px;}
+  .prose a:hover, .cite a:hover{background:var(--alt);text-decoration-color:var(--ink);}
+  .prose p{margin:0 0 20px;}
+  .prose p:last-child{margin-bottom:0;}
+  .navlink{transition:color 120ms ease;text-decoration:none;}
+  .navlink:hover{color:var(--ink)!important;}
+  .paper{padding:15px 0;}
+  [id]{scroll-margin-top:32px;}
+  .sidebar{width:288px;flex-shrink:0;position:sticky;top:0;align-self:flex-start;height:100vh;overflow-y:auto;border-right:1px solid var(--line);padding:32px 28px;background:var(--bg);}
+  .main{flex:1;min-width:0;padding:56px 64px 96px;background:var(--bg);display:flex;justify-content:center;}
+  .col{width:100%;max-width:760px;}
+  .overline{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);}
+  .seclabel{font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--line);}
+  .chip{font-size:11px;font-weight:500;letter-spacing:.04em;padding:5px 10px;border:1px solid var(--line-strong);color:var(--ink);display:inline-block;}
+  .badge{display:inline-block;background:var(--ink);color:var(--bg);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:5px 10px;border-radius:2px;}
+  @page{ size: letter; margin: 0.75in; }
+  @media print{
+    #config-screen,#progress,.sidebar{display:none!important;}
+    .main{padding:0!important;display:block!important;}
+    :root{--bg:#FFFFFF!important;--alt:#F2F2F2!important;--ink:#191919!important;--ink2:#4D4D4D!important;--ink3:#767676!important;--line:#CFCFCF!important;--line-strong:#191919!important;}
+    body, .report, .main{background:transparent!important;}
+    .paper{break-inside:avoid;}
+    section{break-inside:avoid-page;}
+    a{text-decoration:underline;}
+    .col{max-width:none!important;}
+    .prose{font-size:10pt!important;line-height:1.4!important;}
+    .prose p{margin:0 0 8pt!important;}
+    .cite{font-size:9pt!important;line-height:1.3!important;}
+    .seclabel{font-size:9pt!important;margin-bottom:10pt!important;padding-bottom:5pt!important;}
+    .overline{font-size:8pt!important;}
+    h1.ui{font-size:19pt!important;line-height:1.05!important;margin-bottom:5pt!important;}
+    h2.ui{font-size:14pt!important;margin-bottom:3pt!important;}
+    h3.ui{font-size:11.5pt!important;margin-bottom:3pt!important;}
+    header{margin-bottom:10pt!important;}
+    .cover-meta{gap:11pt!important;margin-top:10pt!important;padding-top:9pt!important;}
+    .metaval{font-size:10pt!important;}
+    section{margin-bottom:16pt!important;}
+    .chip{font-size:8pt!important;padding:2pt 5pt!important;}
+    .paper{padding:7pt 0!important;}
+    footer.ui{font-size:8pt!important;}
+    #distribution, #distribution *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}
+    #distribution{break-inside:auto;margin-bottom:10pt!important;}
+    .dist-row{gap:24px!important;}
+    .dist-bars{flex:0 1 340px!important;min-width:0!important;}
+    .dist-chart{break-inside:avoid;}
+    .dist-chart svg{width:150px!important;height:150px!important;}
+    .dist-sub{font-size:8.5pt!important;}
+    .dist-label{width:178px!important;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================= CONFIG SCREEN ============================= -->
+<div id="config-screen" class="config">
+  <div class="brand"><span class="dot"></span><span class="name">bioRxiv <span>Sweeper</span></span></div>
+  <p class="tagline">Sweep the most recent bioRxiv &amp; medRxiv preprints for the subject areas you care about
+  and get back a single, readable three-level digest — total synthesis, by-topic, and by-paper — with hyperlinked
+  APA citations. Everything runs in your browser; nothing is sent anywhere except the preprint API and your chosen LLM.</p>
+
+  <div id="config-error" class="err" hidden></div>
+
+  <div class="field">
+    <label>Summarize with</label>
+    <div class="row">
+      <div class="seg" id="provider-seg">
+        <label data-p="claude"><input type="radio" name="provider" value="claude" checked>Claude</label>
+        <label data-p="gemini"><input type="radio" name="provider" value="gemini">Gemini</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label id="key-label">Claude API key</label>
+    <div class="keyrow">
+      <input type="password" id="apikey" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+      <button class="btn ghost sm" id="clear-key" type="button">Clear</button>
+    </div>
+    <div class="hint" id="key-hint">Stored only in this browser (localStorage) and sent directly to Anthropic.
+      Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>.</div>
+  </div>
+
+  <div class="field">
+    <label>Look-back window</label>
+    <div class="row">
+      <div><input type="number" id="weeks" min="1" max="12" value="1"> <span class="hint" style="display:inline;margin-left:6px;">week(s) back from today</span></div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Subject areas to sweep (check a server heading for the whole set)</label>
+    <div class="tree" id="tree"></div>
+    <div class="toolbtns">
+      <button class="btn ghost sm" id="sel-none" type="button">None</button>
+      <button class="btn ghost sm" id="sel-defaults" type="button">Defaults</button>
+    </div>
+    <div class="selinfo" id="selinfo">0 selected</div>
+  </div>
+
+  <div class="row" style="margin-top:30px;">
+    <button class="btn" id="run" type="button">Run sweep</button>
+  </div>
+</div>
+
+<!-- ============================= PROGRESS ============================= -->
+<div id="progress" hidden>
+  <h2 class="ui">Sweeping…</h2>
+  <div id="prog-phase" class="ui">Preparing…</div>
+  <div class="bar"><i id="prog-bar"></i></div>
+  <div id="prog-clock" class="ui"></div>
+  <div id="prog-log" class="ui"></div>
+</div>
+
+<!-- ============================= RESULTS ============================= -->
+<div id="results"></div>
+
+<script>
+"use strict";
+(function () {
+
+// ======================================================================
+//  Taxonomy — bioRxiv (~27) + medRxiv (45) subject areas.
+//  API category slug = category, lowercase, spaces -> underscores.
+//  Server plays the role of the top-level "group" (like arXiv's areas).
+// ======================================================================
+const BIORXIV_CATS = [
+  "animal behavior and cognition","biochemistry","bioengineering","bioinformatics","biophysics",
+  "cancer biology","cell biology","clinical trials","developmental biology","ecology","epidemiology",
+  "evolutionary biology","genetics","genomics","immunology","microbiology","molecular biology",
+  "neuroscience","paleontology","pathology","pharmacology and toxicology","physiology","plant biology",
+  "scientific communication and education","synthetic biology","systems biology","zoology",
+];
+const MEDRXIV_CATS = [
+  "addiction medicine","allergy and immunology","anesthesia","cardiovascular medicine",
+  "dentistry and oral medicine","dermatology","emergency medicine","endocrinology","epidemiology",
+  "gastroenterology","genetic and genomic medicine","geriatric medicine","health economics",
+  "health informatics","health policy","health systems and quality improvement","hematology",
+  "hiv aids","infectious diseases","intensive care and critical care medicine","medical education",
+  "nephrology","neurology","nutrition","obstetrics and gynecology","occupational and environmental health",
+  "oncology","ophthalmology","orthopedics","pain medicine","palliative medicine","pathology","pediatrics",
+  "pharmacology and therapeutics","primary care research","psychiatry and clinical psychology",
+  "public and global health","radiology and imaging","rehabilitation medicine and physical therapy",
+  "respiratory medicine","sexual and reproductive health","sports medicine","surgery","transplantation","urology",
+];
+const SERVERS = [
+  { id: "biorxiv", label: "bioRxiv", host: "www.biorxiv.org", cats: BIORXIV_CATS,
+    favorites: ["neuroscience","cell biology","genomics","bioinformatics","microbiology"] },
+  { id: "medrxiv", label: "medRxiv", host: "www.medrxiv.org", cats: MEDRXIV_CATS,
+    favorites: ["infectious diseases","epidemiology"] },
+];
+const titleCase = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+const catSlug = (s) => s.replace(/ /g, "_");                 // API query param form
+const slugify = (v) => (v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "topic");
+
+// ======================================================================
+//  Models & config
+// ======================================================================
+const CLAUDE_MODEL = "claude-opus-4-8";
+const GEMINI_MODEL = "gemini-3.1-pro-preview";
+const MAX_TOKENS = 8000;
+const CITATION_RETRIES = 2;
+const PAGE_SIZE = 30;            // bioRxiv /details page size
+const MAX_PER_CATEGORY = 500;    // safety ceiling per topic
+const FETCH_CONCURRENCY = 3;     // polite parallelism across categories
+
+// Approximate USD per 1M tokens (input, output) — cover-page ESTIMATE only.
+const PRICING = {
+  "claude-opus-4-8": [5.0, 25.0],
+  "gemini-3.1-pro-preview": [2.0, 12.0],
+};
+
+// ======================================================================
+//  Prompts — ported from arXiv Sweeper's prompts/*.txt, adapted to
+//  bioRxiv/medRxiv and DOI citation tokens. The [[ID]] contract is kept.
+// ======================================================================
+const PROMPTS = {
+  topic: (name, code, papers) =>
+`You are writing the "by-topic" tier of a digest of recent bioRxiv/medRxiv preprints. Write
+a single synthesis (2-4 paragraphs) of what the subfield "${name}" (${code}) is probing right
+now, based ONLY on the paper summaries below.
+
+Your goal is to reveal the shape of the current frontier: the shared preoccupations, the
+tensions, the through-lines connecting these papers — not a paper-by-paper recap.
+
+Citation rule (important):
+- Whenever you reference a specific paper, cite it inline using the exact token [[DOI]], where
+  DOI is that paper's DOI from the list. Example: "a new assay [[10.1101/2026.01.02.123456]]
+  sharpens the resolution."
+- Only cite papers from the list below. Never write a DOI that is not in the list. Do not invent identifiers.
+- Weave citations naturally into the prose; most claims tied to a specific paper should carry one.
+
+Write plain prose with the [[...]] tokens inline. No markdown headers, no bullet lists. Do not
+restate this instruction.
+
+Papers in this topic:
+${papers}`,
+
+  group: (name, subtopics, context) =>
+`You are writing the top layer of the "by-topic" tier of a digest of recent bioRxiv/medRxiv
+preprints. The reader has selected several subject areas within "${name}" (${subtopics}). Write a
+single synthesis (2-4 paragraphs) of what is happening across this area as a whole right now,
+based ONLY on the per-subcategory briefings below.
+
+Your goal is to step up one level: surface the themes, convergences, and tensions that cut
+ACROSS these subject areas — where the same ideas, methods, or questions recur in more than one,
+and where they pull in different directions. Do not simply recap each subcategory in turn.
+
+Citation rule (important):
+- Whenever you reference a specific paper, cite it inline using the exact token [[DOI]], where DOI
+  is that paper's DOI from the briefings. Only cite papers that appear below. Never invent a DOI.
+- Weave citations naturally into the prose; most claims tied to a specific paper should carry one.
+
+Write plain prose with the [[...]] tokens inline. No markdown headers, no bullet lists. Do not
+restate this instruction.
+
+Per-subcategory briefings:
+${context}`,
+
+  total: (topicList, context) =>
+`You are writing the "total" tier — the top-level synthesis — of a digest of recent
+bioRxiv/medRxiv preprints spanning several subfields. Write 2-4 paragraphs that show a reader
+where the frontier of the life sciences is currently probing across ALL the topics swept, based
+ONLY on the per-topic syntheses and paper summaries below.
+
+Aim for the big picture: the themes and convergences that cut across topics, where energy is
+concentrating, and what is notably shifting. Name concrete papers where they exemplify a trend,
+but do not simply list them.
+
+Citation rule (important):
+- Whenever you reference a specific paper, cite it inline using the exact token [[DOI]]. Only cite
+  papers from the list below. Never write a DOI that is not in the list. Do not invent identifiers.
+
+Write plain prose with the [[...]] tokens inline. No markdown headers, no bullet lists. Do not
+restate this instruction.
+
+Topics swept: ${topicList}
+
+Per-topic syntheses and papers:
+${context}`,
+};
+
+// ======================================================================
+//  Citations — APA 7 for bioRxiv/medRxiv preprints.
+//  Authors arrive as "Surname, I.; Surname, I." (already surname-first),
+//  so no surname-guessing heuristic is needed.
+// ======================================================================
+function parseAuthors(raw) {
+  return (raw || "").split(";").map((s) => s.trim()).filter(Boolean);
+}
+function familyName(author) { return (author.split(",")[0] || author).trim(); }
+
+function formatAuthorsApa(authors) {
+  const a = authors.filter(Boolean);
+  if (!a.length) return "";
+  if (a.length === 1) return a[0];
+  if (a.length <= 20) return a.slice(0, -1).join(", ") + ", & " + a[a.length - 1];
+  return a.slice(0, 19).join(", ") + ", ... " + a[a.length - 1];   // 21+ authors
+}
+function inTextCitation(paper) {
+  const fams = paper.authors.map(familyName).filter(Boolean);
+  let lead;
+  if (!fams.length) lead = paper.title.split(/\s+/).slice(0, 3).join(" ");
+  else if (fams.length === 1) lead = fams[0];
+  else if (fams.length === 2) lead = fams[0] + " & " + fams[1];
+  else lead = fams[0] + " et al.";
+  return `${lead}, ${paper.year}`;
+}
+
+// ======================================================================
+//  bioRxiv / medRxiv API client
+//  GET /details/{server}/{start}/{end}/{cursor}/json?category={slug}
+//  Cursor paginates by 30; messages[0].total is the in-window count.
+// ======================================================================
+function todayISO() { const d = new Date(); return d.toISOString().slice(0, 10); }
+function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
+async function fetchJson(url) {
+  const r = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!r.ok) throw new Error(`bioRxiv API HTTP ${r.status}`);
+  return r.json();
+}
+
+// Fetch every paper in [start,end] for one server+category, deduped by DOI (keep highest version).
+async function fetchCategory(server, categorySlug, start, end) {
+  const base = `https://api.biorxiv.org/details/${server}/${start}/${end}`;
+  const byDoi = new Map();
+  let cursor = 0, total = null, truncated = false, guard = 0;
+  while (true) {
+    const data = await fetchJson(`${base}/${cursor}/json?category=${encodeURIComponent(categorySlug)}`);
+    const msg = (data.messages && data.messages[0]) || {};
+    if (total === null) total = parseInt(msg.total || "0", 10) || 0;
+    const coll = data.collection || [];
+    for (const x of coll) {
+      const doi = (x.doi || "").trim();
+      if (!doi) continue;
+      const ver = parseInt(x.version || "1", 10) || 1;
+      const prev = byDoi.get(doi);
+      if (!prev || ver > prev._ver) byDoi.set(doi, mkPaper(x, ver));
+    }
+    cursor += PAGE_SIZE;
+    if (byDoi.size >= MAX_PER_CATEGORY) { truncated = true; break; }
+    if (cursor >= total || coll.length === 0) break;
+    if (++guard > 400) break;   // hard backstop
+  }
+  return { papers: [...byDoi.values()], truncated };
+}
+
+function mkPaper(x, ver) {
+  const server = (x.server || "").toLowerCase().includes("med") ? "medrxiv" : "biorxiv";
+  const host = server === "medrxiv" ? "www.medrxiv.org" : "www.biorxiv.org";
+  const doi = (x.doi || "").trim();
+  const date = (x.date || "").trim();
+  return {
+    _ver: ver,
+    doi,
+    title: (x.title || "").trim(),
+    authors: parseAuthors(x.authors),
+    abstract: (x.abstract || "").trim(),
+    category: (x.category || "").trim(),
+    date,
+    version: ver,
+    server,
+    year: (date.slice(0, 4)) || String(new Date().getFullYear()),
+    absUrl: `https://${host}/content/${doi}v${ver}`,
+  };
+}
+
+// Simple concurrency-limited map (polite to the API).
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let i = 0;
+  async function worker() { while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx], idx); } }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+// ======================================================================
+//  Summarizer — three levels, bottom-up, provider-agnostic core.
+//  Claude & Gemini differ only in the transport calls below.
+// ======================================================================
+const TOKEN_RE = /\[\[\s*([^\[\]]+?)\s*\]\]/g;
+const TOKEN_RUN_RE = /\[\[\s*[^\[\]]+?\s*\]\](?:\s*\[\[\s*[^\[\]]+?\s*\]\])*/g;
+
+function extractCitedIds(text) {
+  const out = new Set(); let m;
+  TOKEN_RE.lastIndex = 0;
+  while ((m = TOKEN_RE.exec(text || ""))) out.add(m[1].trim());
+  return out;
+}
+function invalidCitations(text, valid) {
+  const bad = new Set();
+  for (const id of extractCitedIds(text)) if (!valid.has(id)) bad.add(id);
+  return bad;
+}
+function stripInvalidTokens(text, valid) {
+  return (text || "")
+    .replace(TOKEN_RE, (full, id) => (valid.has(id.trim()) ? full : ""))
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+class Summarizer {
+  constructor(provider, apiKey) {
+    this.provider = provider;
+    this.apiKey = apiKey;
+    this.model = provider === "gemini" ? GEMINI_MODEL : CLAUDE_MODEL;
+    this.inputTokens = 0;
+    this.outputTokens = 0;
+  }
+
+  async textCall(prompt) {
+    return this.provider === "gemini" ? this._gemini(prompt) : this._claude(prompt);
+  }
+
+  async _claude(prompt) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": this.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        max_tokens: MAX_TOKENS,
+        thinking: { type: "adaptive" },
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!r.ok) throw new Error(`Claude API ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    const data = await r.json();
+    const u = data.usage || {};
+    this.inputTokens += u.input_tokens || 0;
+    this.outputTokens += u.output_tokens || 0;
+    const block = (data.content || []).find((b) => b.type === "text");
+    return ((block && block.text) || "").trim();
+  }
+
+  async _gemini(prompt) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${encodeURIComponent(this.apiKey)}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: MAX_TOKENS },
+      }),
+    });
+    if (!r.ok) throw new Error(`Gemini API ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    const data = await r.json();
+    const um = data.usageMetadata || {};
+    const prompt_toks = um.promptTokenCount || 0;
+    const total_toks = um.totalTokenCount || 0;
+    this.inputTokens += prompt_toks;
+    this.outputTokens += Math.max(0, total_toks - prompt_toks);
+    const cand = (data.candidates || [])[0];
+    const parts = (cand && cand.content && cand.content.parts) || [];
+    return parts.map((p) => p.text || "").join("").trim();
+  }
+
+  async generateWithCitations(prompt, valid) {
+    let text = "";
+    for (let attempt = 0; attempt <= CITATION_RETRIES; attempt++) {
+      text = await this.textCall(prompt);
+      if (invalidCitations(text, valid).size === 0) return text;
+    }
+    return stripInvalidTokens(text, valid);
+  }
+}
+
+function paperSummaryBlock(p) { return `[[${p.doi}]] ${p.title}\n${p.summary || "(no abstract)"}`; }
+
+// Orchestrate all three levels. progress(done, total, label).
+async function runSweep(sum, topicPapers, progress) {
+  // Level 3 (by-paper) = abstract verbatim; empty abstracts get a plain stand-in (no LLM).
+  const results = [];
+  const populated = topicPapers.filter((t) => t.papers.length);
+  const groupCounts = {};
+  for (const t of topicPapers) groupCounts[t.group] = (groupCounts[t.group] || 0) + 1;
+  const groupSteps = Object.values(groupCounts).filter((n) => n >= 2).length;
+  const totalSteps = populated.length + groupSteps + 1;
+  let done = 0;
+  const tick = (label) => { progress(++done, totalSteps, label); };
+  progress(0, totalSteps, "preparing");
+
+  for (const t of topicPapers) {
+    const tr = { topic: t, papers: [], summary: "", gaps: [] };
+    if (!t.papers.length) { tr.gaps.push("No papers fetched for this topic."); results.push(tr); continue; }
+    t.papers.forEach((p, i) => {
+      tr.papers.push({
+        paper: p,
+        anchor: `p-${t.slug}-${i + 1}`,
+        summary: p.abstract || "Abstract not available for this preprint.",
+      });
+    });
+    // Level 2 — by subcategory
+    try {
+      const valid = new Set(tr.papers.map((ps) => ps.paper.doi));
+      const blocks = tr.papers.map((ps) => paperSummaryBlock({ doi: ps.paper.doi, title: ps.paper.title, summary: ps.summary })).join("\n\n");
+      tr.summary = await sum.generateWithCitations(PROMPTS.topic(t.name, t.code, blocks), valid);
+    } catch (e) { tr.gaps.push(`Topic synthesis unavailable (${e.message}).`); }
+    results.push(tr);
+    tick(t.code);
+  }
+
+  const sweep = { topics: results, groupSummaries: {}, totalSummary: "", gaps: [] };
+
+  // Level 2 (top layer) — by group (server), only for groups spanning 2+ subcategories.
+  for (const g of deriveGroups(sweep)) {
+    if (g.topics.length < 2) continue;
+    try {
+      const contributing = g.topics.filter((t) => (t.summary || "").trim());
+      if (contributing.length >= 2) {
+        const valid = new Set();
+        for (const t of g.topics) for (const ps of t.papers) valid.add(ps.paper.doi);
+        const ctx = contributing.map((t) => `### ${t.topic.code} — ${t.topic.name}\n${t.summary}`).join("\n\n");
+        const subs = contributing.map((t) => t.topic.code).join(", ");
+        const s = await sum.generateWithCitations(PROMPTS.group(g.name, subs, ctx), valid);
+        if (s) sweep.groupSummaries[g.name] = s;
+      }
+    } catch (e) { sweep.gaps.push(`Group synthesis for ${g.name} unavailable (${e.message}).`); }
+    finally { tick(g.name); }
+  }
+
+  // Level 1 — total.
+  try {
+    const pop = results.filter((t) => t.papers.length);
+    if (pop.length) {
+      const valid = new Set();
+      for (const t of pop) for (const ps of t.papers) valid.add(ps.paper.doi);
+      const blocks = pop.map((t) => {
+        const body = (t.summary || "") || t.papers.map((ps) => paperSummaryBlock({ doi: ps.paper.doi, title: ps.paper.title, summary: ps.summary })).join("\n");
+        return `## ${t.topic.code} — ${t.topic.name}\n${body}`;
+      }).join("\n\n");
+      const list = pop.map((t) => t.topic.code).join(", ");
+      sweep.totalSummary = await sum.generateWithCitations(PROMPTS.total(list, blocks), valid);
+    }
+  } catch (e) { sweep.gaps.push(`Total synthesis unavailable (${e.message}).`); }
+  finally { tick("overall synthesis"); }
+
+  return sweep;
+}
+
+// Derived two-layer view: subcategories bucketed by group (server) in first-seen order.
+function deriveGroups(sweep) {
+  const order = [], buckets = {};
+  for (const t of sweep.topics) {
+    const g = t.topic.group;
+    if (!buckets[g]) { buckets[g] = []; order.push(g); }
+    buckets[g].push(t);
+  }
+  return order.map((g) => ({
+    name: g,
+    slug: slugify(g),
+    anchor: `grp-${slugify(g)}`,
+    topics: buckets[g],
+    summary: sweep.groupSummaries[g] || "",
+    count: buckets[g].reduce((n, t) => n + t.papers.length, 0),
+  }));
+}
+
+// ======================================================================
+//  Report rendering (charts, prose linking, cover) — ported from report.py
+// ======================================================================
+const GROUP_COLORS = ["#2a78d6","#1baf7a","#eda100","#008300","#4a3aa7","#e34948","#e87ba4","#eb6834"];
+const OVERFLOW_COLOR = "#898781";
+
+function mixHex(hex, t) {
+  const h = hex.replace("#", "");
+  let r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  r = Math.round(r + (255 - r) * t); g = Math.round(g + (255 - g) * t); b = Math.round(b + (255 - b) * t);
+  const hx = (n) => n.toString(16).padStart(2, "0");
+  return `#${hx(r)}${hx(g)}${hx(b)}`;
+}
+function topicDistribution(groups) {
+  const gs = groups.filter((g) => g.count > 0).slice().sort((a, b) => b.count - a.count);
+  let maxSub = 1;
+  for (const g of gs) for (const t of g.topics) if (t.papers.length > maxSub) maxSub = t.papers.length;
+  return gs.map((g, i) => {
+    const base = i < GROUP_COLORS.length ? GROUP_COLORS[i] : OVERFLOW_COLOR;
+    const subs = g.topics.filter((t) => t.papers.length > 0).slice().sort((a, b) => b.papers.length - a.papers.length);
+    return {
+      name: g.name, count: g.count, color: base,
+      subcats: subs.map((t, j) => ({
+        code: t.topic.code, name: t.topic.name, count: t.papers.length,
+        color: mixHex(base, Math.min(0.42, 0.14 * j)),
+        pct: Math.round((1000 * t.papers.length) / maxSub) / 10,
+      })),
+    };
+  });
+}
+function sbPoint(cx, cy, r, deg) { const a = (deg * Math.PI) / 180; return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; }
+function annularSector(cx, cy, ri, ro, a0, a1) {
+  const large = a1 - a0 > 180 ? 1 : 0;
+  const [x0o, y0o] = sbPoint(cx, cy, ro, a0), [x1o, y1o] = sbPoint(cx, cy, ro, a1);
+  const [x1i, y1i] = sbPoint(cx, cy, ri, a1), [x0i, y0i] = sbPoint(cx, cy, ri, a0);
+  const f = (n) => n.toFixed(2);
+  return `M${f(x0o)},${f(y0o)} A${f(ro)},${f(ro)} 0 ${large} 1 ${f(x1o)},${f(y1o)} L${f(x1i)},${f(y1i)} A${f(ri)},${f(ri)} 0 ${large} 0 ${f(x0i)},${f(y0i)} Z`;
+}
+function ringBand(cx, cy, ri, ro, color) {
+  return `<circle cx="${cx}" cy="${cy}" r="${((ri + ro) / 2).toFixed(2)}" fill="none" stroke="${color}" stroke-width="${(ro - ri).toFixed(2)}"/>`;
+}
+function sunburstSvg(dist, size = 200) {
+  const total = dist.reduce((n, g) => n + g.count, 0);
+  if (!dist.length || total <= 0) return "";
+  const cx = size / 2, cy = size / 2;
+  const r1i = size * 0.17, r1o = size * 0.30, r2i = size * 0.315, r2o = size * 0.46, gap = 0.6;
+  const parts = []; let a = 0;
+  for (const g of dist) {
+    const span = (360 * g.count) / total, g0 = a, g1 = a + span;
+    parts.push(span >= 359.999 ? ringBand(cx, cy, r1i, r1o, g.color)
+      : `<path d="${annularSector(cx, cy, r1i, r1o, g0 + gap, g1 - gap)}" fill="${g.color}"/>`);
+    const subTotal = g.subcats.reduce((n, s) => n + s.count, 0) || 1;
+    let sa = g0;
+    for (const s of g.subcats) {
+      const ss = (span * s.count) / subTotal, s0 = sa, s1 = sa + ss;
+      parts.push(ss >= 359.999 ? ringBand(cx, cy, r2i, r2o, s.color)
+        : `<path d="${annularSector(cx, cy, r2i, r2o, s0 + gap, s1 - gap)}" fill="${s.color}"/>`);
+      sa = s1;
+    }
+    a = g1;
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="Papers by server and subject area">${parts.join("")}</svg>`;
+}
+
+function esc(s) {
+  return (s == null ? "" : String(s)).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+function plural(n, one, many) { return `${n} ${n === 1 ? one : (many || one + "s")}`; }
+
+// Render prose: escape text, turn runs of [[doi]] tokens into "; "-joined anchor links.
+function renderProse(text, index) {
+  text = (text || "").trim();
+  if (!text) return "";
+  const paras = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return paras.map((para) => {
+    const escd = esc(para);
+    const linked = escd.replace(TOKEN_RUN_RE, (run) => {
+      const ids = []; let m; TOKEN_RE.lastIndex = 0;
+      while ((m = TOKEN_RE.exec(run))) ids.push(m[1].trim());
+      const rendered = ids.map((id) => {
+        const ps = index[id];
+        if (!ps) return null;
+        return `<a href="#${ps.anchor}">${esc(inTextCitation(ps.paper))}</a>`;
+      }).filter(Boolean);
+      return rendered.join("; ");
+    });
+    return `<p>${linked}</p>`;
+  }).join("");
+}
+
+function estimateCost(model, inTok, outTok) {
+  const r = PRICING[model];
+  if (!r) return null;
+  return (inTok * r[0] + outTok * r[1]) / 1e6;
+}
+function fmtCost(d) { if (d == null) return "n/a"; return d >= 1 ? `≈ $${d.toFixed(2)}` : `≈ $${d.toFixed(4)}`; }
+
+function nowStrings() {
+  const d = new Date();
+  const date = d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  const dt = d.toLocaleString(undefined, { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return { date, dt };
+}
+
+function buildReport(sweep, meta) {
+  const index = {};
+  for (const t of sweep.topics) for (const ps of t.papers) index[ps.paper.doi] = ps;
+  const groups = deriveGroups(sweep);
+  const topics = sweep.topics;
+  const dist = topicDistribution(groups);
+  const { date, dt } = nowStrings();
+  const paperCount = topics.reduce((n, t) => n + t.papers.length, 0);
+
+  const model = [meta.provider, meta.model].filter(Boolean).join(" · ");
+  const totalTok = meta.inputTokens + meta.outputTokens;
+  const tokens = totalTok ? `${totalTok.toLocaleString()} (${meta.inputTokens.toLocaleString()} in / ${meta.outputTokens.toLocaleString()} out)` : "";
+  const cost = totalTok ? fmtCost(estimateCost(meta.model, meta.inputTokens, meta.outputTokens)) : "";
+  const truncated = meta.truncated.length ? `${meta.truncated.join(", ")} hit the ${MAX_PER_CATEGORY}-paper cap` : "";
+  const chipCodes = [...new Set(topics.map((t) => t.topic.code))];
+
+  const nav = groups.map((g) => `
+    <a class="navlink" href="#${g.anchor}" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:9px 0 5px;font-size:12px;color:var(--ink);font-weight:600;">
+      <span>${esc(g.name)}</span><span style="font-size:11px;color:var(--ink3);font-weight:400;">${g.count}</span></a>
+    ${g.topics.map((t) => `
+    <a class="navlink" href="#${t.anchor}" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:6px 0 6px 12px;font-size:13px;color:var(--ink2);border-bottom:1px solid var(--line);">
+      <span><span style="font-weight:600;color:var(--ink);">${esc(t.topic.code)}</span></span>
+      <span style="font-size:11px;color:var(--ink3);">${t.papers.length}</span></a>`).join("")}`).join("");
+
+  const distHtml = dist.length ? `
+    <section id="distribution" style="margin-bottom:60px;">
+      <div class="ui seclabel">Papers by subject area</div>
+      <div class="dist-row" style="display:flex;gap:32px;align-items:center;flex-wrap:wrap;">
+        <div class="dist-bars" style="flex:0 1 380px;min-width:280px;">
+          ${dist.map((g) => `
+          <div class="dist-group" style="margin-bottom:16px;">
+            <div class="ui dist-ghead" style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:600;color:var(--ink);border-bottom:1px solid var(--line);padding-bottom:4px;margin-bottom:7px;">
+              <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${g.color};margin-right:7px;"></span>${esc(g.name)}</span>
+              <span style="color:var(--ink3);font-weight:500;">${g.count}</span></div>
+            ${g.subcats.map((s) => `
+            <div class="ui dist-sub" style="display:flex;align-items:center;gap:10px;margin:4px 0;font-size:12px;">
+              <span class="dist-label" style="width:196px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><span style="color:var(--ink);font-weight:600;">${esc(s.code)}</span></span>
+              <span style="flex:1;min-width:24px;height:9px;background:var(--alt);border-radius:2px;overflow:hidden;"><span style="display:block;height:100%;width:${s.pct}%;background:${s.color};"></span></span>
+              <span style="width:24px;text-align:right;flex-shrink:0;color:var(--ink);font-variant-numeric:tabular-nums;">${s.count}</span></div>`).join("")}
+          </div>`).join("")}
+        </div>
+        <div class="dist-chart" style="flex:1 1 200px;display:flex;justify-content:center;">${sunburstSvg(dist)}</div>
+      </div>
+      <div class="ui" style="font-size:10px;color:var(--ink3);margin-top:12px;">Inner ring: server · outer ring: subject area. Counts are per topic — a paper cross-listed in several categories is counted in each.</div>
+    </section>` : "";
+
+  const metaBlock = `
+    <div class="ui cover-meta" style="display:flex;flex-wrap:wrap;gap:36px;margin-top:32px;padding-top:24px;border-top:2px solid var(--line-strong);">
+      <div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Topics</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${chipCodes.map((c) => `<span class="chip">${esc(c)}</span>`).join("")}</div></div>
+      <div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px;">Papers</div><span class="badge">${paperCount}</span></div>
+      ${model ? `<div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Model</div><div class="metaval" style="font-size:15px;font-weight:500;">${esc(model)}</div></div>` : ""}
+      ${tokens ? `<div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Tokens</div><div class="metaval" style="font-size:15px;font-weight:500;">${esc(tokens)}</div></div>` : ""}
+      ${cost ? `<div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Est. API cost</div><div class="metaval" style="font-size:15px;font-weight:500;">${esc(cost)}</div></div>` : ""}
+      ${truncated ? `<div><div style="font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">Truncated</div><div class="metaval" style="font-size:15px;font-weight:500;color:var(--ink2);">${esc(truncated)}</div></div>` : ""}
+    </div>`;
+
+  const gapsBlock = sweep.gaps.length ? `<div class="ui" style="font-size:12px;color:var(--ink2);background:var(--alt);border-left:3px solid var(--ink3);padding:10px 14px;margin-bottom:40px;">Gaps: ${esc(sweep.gaps.join(" "))}</div>` : "";
+
+  const topicsSection = groups.map((g) => `
+    <div id="${g.anchor}" style="margin-bottom:52px;">
+      <h2 class="ui" style="font-weight:700;font-size:30px;letter-spacing:-0.02em;margin:0 0 4px;">${esc(g.name)}</h2>
+      <div class="ui" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:16px;">${plural(g.topics.length, "subject area")} · ${plural(g.count, "paper")}</div>
+      ${g.summary ? `<div class="prose" style="font-size:17px;line-height:1.78;margin-bottom:32px;">${renderProse(g.summary, index)}</div>` : ""}
+      ${g.topics.map((t, i) => `
+        <div id="${t.anchor}" style="margin:0 0 32px;${(i > 0 || g.summary) ? "padding-left:16px;border-left:2px solid var(--line);" : ""}">
+          <h3 class="ui" style="font-weight:700;font-size:21px;letter-spacing:-0.01em;margin:0 0 4px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">${esc(t.topic.code)} <span style="font-size:14px;font-weight:400;color:var(--ink3);">${esc(t.topic.name)}</span></h3>
+          <div class="ui" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:14px;">${plural(t.papers.length, "paper")}</div>
+          <div class="prose" style="font-size:16px;line-height:1.76;">${t.summary ? renderProse(t.summary, index) : '<p style="color:var(--ink3);">No synthesis was generated for this topic.</p>'}</div>
+          ${t.gaps.length ? `<div class="ui" style="font-size:11px;color:var(--ink3);margin-top:8px;">${esc(t.gaps.join(" "))}</div>` : ""}
+        </div>`).join("")}
+    </div>`).join("");
+
+  const papersSection = topics.map((t) => `
+    <div style="margin-bottom:48px;">
+      <h2 class="ui" style="font-weight:700;font-size:22px;letter-spacing:-0.01em;margin:0 0 2px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">${esc(t.topic.code)} <span style="font-size:14px;font-weight:400;color:var(--ink3);">${esc(t.topic.name)}</span></h2>
+      <div class="ui" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;">${plural(t.papers.length, "paper")}</div>
+      ${t.papers.map((ps) => {
+        const p = ps.paper;
+        const authors = formatAuthorsApa(p.authors);
+        const hostLabel = p.server === "medrxiv" ? "medRxiv" : "bioRxiv";
+        const titleTxt = p.title.replace(/\.\s*$/, "");
+        return `
+        <article id="${ps.anchor}" class="paper" style="border-top:1px solid var(--line);">
+          <div style="display:flex;justify-content:space-between;gap:16px;align-items:baseline;margin-bottom:10px;">
+            <span class="ui" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);">${esc(hostLabel)} · ${esc(p.doi)}</span>
+            <a class="navlink ui" href="${esc(p.absUrl)}" target="_blank" rel="noopener" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);white-space:nowrap;">View on ${esc(hostLabel)}&nbsp;↗</a>
+          </div>
+          <p class="cite" style="font-size:16px;line-height:1.55;margin:0 0 10px;">${authors ? esc(authors) + " " : ""}(${esc(p.year)}). <a href="${esc(p.absUrl)}" target="_blank" rel="noopener" style="font-style:italic;">${esc(titleTxt)}</a>. ${esc(hostLabel)}. ${esc(p.absUrl)}</p>
+          <p class="prose" style="font-size:15.5px;line-height:1.72;color:var(--ink2);margin:0;">${esc(ps.summary)}</p>
+        </article>`;
+      }).join("")}
+    </div>`).join("");
+
+  return `
+  <div class="report">
+    <aside class="sidebar ui">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:26px;">
+        <span style="width:13px;height:13px;border-radius:50%;background:var(--ink);display:inline-block;"></span>
+        <span style="font-weight:700;font-size:15px;letter-spacing:-0.01em;">bioRxiv <span style="color:var(--ink3);font-weight:500;">Sweeper</span></span>
+      </div>
+      <div class="overline" style="margin-bottom:6px;">Frontier Sweep</div>
+      <div style="font-size:12px;color:var(--ink2);line-height:1.5;">${esc(date)} · ${plural(paperCount, "paper")}</div>
+      <div class="overline" style="margin:26px 0 12px;border-top:1px solid var(--line);padding-top:22px;">Contents</div>
+      <nav style="display:flex;flex-direction:column;">
+        <a class="navlink" href="#total" style="padding:7px 0;font-size:13px;color:var(--ink);font-weight:500;">Total summary</a>
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:16px 0 4px;">By topic</div>
+        ${nav}
+        <div style="font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:16px 0 4px;">By paper</div>
+        <a class="navlink" href="#papers" style="padding:7px 0;font-size:13px;color:var(--ink);font-weight:500;">All ${plural(paperCount, "entry", "entries")}</a>
+      </nav>
+      <button id="theme-toggle" class="ui" style="margin-top:28px;width:100%;text-align:left;font-size:12px;font-weight:500;color:var(--ink);background:transparent;border:1px solid var(--line-strong);padding:9px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <span id="theme-label">Switch to dark</span><span style="color:var(--ink3);">◐</span></button>
+      <button id="print-report" class="ui" style="margin-top:8px;width:100%;text-align:left;font-size:12px;font-weight:500;color:var(--bg);background:var(--ink);border:1px solid var(--line-strong);padding:9px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <span>Print / Save as PDF</span><span style="opacity:.6;">↧</span></button>
+      <button id="new-sweep" class="ui" style="margin-top:8px;width:100%;text-align:left;font-size:12px;font-weight:500;color:var(--ink);background:transparent;border:1px solid var(--line);padding:9px 12px;">← New sweep</button>
+      <div style="margin-top:22px;font-size:10px;line-height:1.6;color:var(--ink3);">Generated in-browser by bioRxiv Sweeper. Citations follow APA 7. Every entry links to its preprint page.</div>
+    </aside>
+    <main class="main"><div class="col">
+      <header style="margin-bottom:56px;">
+        <div class="ui" style="font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink3);margin-bottom:22px;display:flex;align-items:center;gap:10px;">
+          <span style="width:8px;height:8px;background:var(--ink);border-radius:50%;display:inline-block;"></span> bioRxiv / medRxiv Sweep</div>
+        <h1 class="ui" style="font-weight:700;font-size:44px;line-height:1.06;letter-spacing:-0.02em;margin:0;">${esc(dt)}</h1>
+        ${metaBlock}
+      </header>
+      ${distHtml}
+      ${gapsBlock}
+      <section id="total" style="margin-bottom:64px;">
+        <div class="ui seclabel">Total summary</div>
+        <div class="prose" style="font-size:18px;line-height:1.78;">${sweep.totalSummary ? renderProse(sweep.totalSummary, index) : '<p style="color:var(--ink3);">No total synthesis was generated for this sweep.</p>'}</div>
+      </section>
+      <section id="topics" style="margin-bottom:64px;">
+        <div class="ui seclabel" style="margin-bottom:28px;">By topic</div>
+        ${topicsSection}
+      </section>
+      <section id="papers" style="margin-bottom:24px;">
+        <div class="ui seclabel" style="margin-bottom:28px;">By paper</div>
+        ${papersSection}
+      </section>
+      <footer class="ui" style="border-top:2px solid var(--line-strong);padding-top:20px;font-size:11px;letter-spacing:.04em;color:var(--ink3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <span>bioRxiv Sweeper · ${esc(date)}</span>
+        <span>${plural(paperCount, "paper")} · ${plural(topics.length, "topic")} · APA 7</span>
+      </footer>
+    </div></main>
+  </div>`;
+}
+
+// ======================================================================
+//  UI wiring
+// ======================================================================
+const $ = (id) => document.getElementById(id);
+let cfg, prog, resultsEl;   // assigned in the browser init guard below
+
+// localStorage can throw (private modes, opaque origins) — degrade gracefully.
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const lsDel = (k) => { try { localStorage.removeItem(k); } catch (e) {} };
+
+function keyStorageId(provider) { return `biorxiv-sweeper-key-${provider}`; }
+function currentProvider() { return document.querySelector('input[name="provider"]:checked').value; }
+
+function loadKeyForProvider() {
+  const p = currentProvider();
+  $("apikey").value = lsGet(keyStorageId(p)) || "";
+  if (p === "gemini") {
+    $("key-label").textContent = "Gemini API key";
+    $("apikey").placeholder = "AIza…";
+    $("key-hint").innerHTML = 'Stored only in this browser (localStorage) and sent directly to Google. Get one at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.';
+  } else {
+    $("key-label").textContent = "Claude API key";
+    $("apikey").placeholder = "sk-ant-…";
+    $("key-hint").innerHTML = 'Stored only in this browser (localStorage) and sent directly to Anthropic. Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>.';
+  }
+}
+
+// Build category tree.
+function buildTree() {
+  const tree = $("tree");
+  tree.innerHTML = SERVERS.map((srv) => `
+    <div class="grp" data-server="${srv.id}">
+      <div class="grp-head"><input type="checkbox" class="grp-cb" data-server="${srv.id}">
+        <span>${srv.label}</span><span class="cnt">${srv.cats.length} areas</span></div>
+      <div class="cats">
+        ${srv.cats.map((c) => `<label class="cat"><input type="checkbox" class="cat-cb" data-server="${srv.id}" value="${esc(c)}">${esc(titleCase(c))}</label>`).join("")}
+      </div>
+    </div>`).join("");
+  tree.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el.classList.contains("grp-cb")) {
+      tree.querySelectorAll(`.cat-cb[data-server="${el.dataset.server}"]`).forEach((cb) => { cb.checked = el.checked; });
+    } else if (el.classList.contains("cat-cb")) {
+      syncGroup(el.dataset.server);
+    }
+    updateSelInfo();
+  });
+}
+function syncGroup(server) {
+  const cbs = [...$("tree").querySelectorAll(`.cat-cb[data-server="${server}"]`)];
+  const gcb = $("tree").querySelector(`.grp-cb[data-server="${server}"]`);
+  gcb.checked = cbs.every((c) => c.checked);
+}
+function applyDefaults() {
+  $("tree").querySelectorAll(".cat-cb").forEach((cb) => {
+    const srv = SERVERS.find((s) => s.id === cb.dataset.server);
+    cb.checked = srv.favorites.includes(cb.value);
+  });
+  SERVERS.forEach((s) => syncGroup(s.id));
+  updateSelInfo();
+}
+function selectedTopics() {
+  const out = [];
+  $("tree").querySelectorAll(".cat-cb:checked").forEach((cb) => {
+    const srv = SERVERS.find((s) => s.id === cb.dataset.server);
+    const cat = cb.value;
+    out.push({
+      server: srv.id, group: srv.label, category: cat,
+      code: titleCase(cat), name: srv.label,
+      slug: slugify(srv.id + "-" + cat),
+    });
+  });
+  return out;
+}
+function updateSelInfo() {
+  const n = $("tree").querySelectorAll(".cat-cb:checked").length;
+  $("selinfo").textContent = plural(n, "area") + " selected";
+}
+
+function showError(msg) { const e = $("config-error"); e.textContent = msg; e.hidden = false; }
+function clearError() { $("config-error").hidden = true; }
+
+function updateProviderSeg() {
+  document.querySelectorAll("#provider-seg label").forEach((l) => {
+    l.classList.toggle("on", l.dataset.p === currentProvider());
+  });
+}
+
+// --- Progress bar with tqdm-style elapsed<eta clock ---
+let progStart = 0;
+function setProgress(done, total, label) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  $("prog-bar").style.width = pct + "%";
+  $("prog-phase").textContent = label ? `${label} · ${done}/${total} synthesis steps` : `${done}/${total}`;
+  if (done > 0) {
+    const el = (Date.now() - progStart) / 1000;
+    const per = el / done, eta = per * (total - done);
+    $("prog-clock").textContent = `[${fmtDur(el)}<${fmtDur(eta)}]`;
+  }
+}
+function fmtDur(s) { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, "0")}`; }
+function logLine(s) { const d = document.createElement("div"); d.textContent = s; $("prog-log").appendChild(d); $("prog-log").scrollTop = 1e9; }
+
+// --- Wire report interactions after injecting the report DOM ---
+function wireReport() {
+  const label = $("theme-label");
+  const apply = (theme) => {
+    document.documentElement.setAttribute("data-theme", theme);
+    if (label) label.textContent = "Switch to " + (theme === "dark" ? "light" : "dark");
+  };
+  let stored = null; try { stored = localStorage.getItem("biorxiv-sweeper-theme"); } catch (e) {}
+  apply(stored === "dark" || stored === "light" ? stored : (document.documentElement.getAttribute("data-theme") || "light"));
+  const tg = $("theme-toggle");
+  if (tg) tg.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    try { localStorage.setItem("biorxiv-sweeper-theme", next); } catch (e) {}
+    apply(next);
+  });
+  const pb = $("print-report");
+  if (pb) pb.addEventListener("click", () => { try { window.print(); } catch (e) {} });
+  const ns = $("new-sweep");
+  if (ns) ns.addEventListener("click", () => { resultsEl.innerHTML = ""; cfg.hidden = false; window.scrollTo(0, 0); });
+}
+
+// --- Main run flow ---
+async function run() {
+  clearError();
+  const provider = currentProvider();
+  const key = $("apikey").value.trim();
+  if (!key) { showError("Enter your API key first."); return; }
+  const topics = selectedTopics();
+  if (!topics.length) { showError("Select at least one subject area to sweep."); return; }
+  lsSet(keyStorageId(provider), key);
+
+  const weeks = Math.max(1, Math.min(12, parseInt($("weeks").value, 10) || 1));
+  const start = daysAgoISO(weeks * 7), end = todayISO();
+
+  cfg.hidden = true; prog.hidden = false; $("prog-log").innerHTML = ""; progStart = Date.now();
+  $("prog-phase").textContent = "Fetching preprints…"; $("prog-bar").style.width = "0%"; $("prog-clock").textContent = "";
+
+  try {
+    // Fetch each topic (server+category) with polite concurrency.
+    const truncated = [];
+    let fetched = 0;
+    const topicPapers = await mapLimit(topics, FETCH_CONCURRENCY, async (t) => {
+      let res;
+      try { res = await fetchCategory(t.server, catSlug(t.category), start, end); }
+      catch (e) { logLine(`⚠ ${t.group}/${t.code}: fetch failed (${e.message})`); return { ...t, papers: [], fetchError: e.message }; }
+      if (res.truncated) truncated.push(t.code);
+      fetched += res.papers.length;
+      logLine(`✓ ${t.group}/${t.code}: ${res.papers.length} papers${res.truncated ? " (capped)" : ""}`);
+      $("prog-phase").textContent = `Fetching preprints… ${fetched} so far`;
+      return { ...t, papers: res.papers };
+    });
+
+    const anyPapers = topicPapers.some((t) => t.papers.length);
+    if (!anyPapers) throw new Error("No papers were fetched for any selected topic in this window. Try a longer look-back or different areas.");
+
+    // Summarize.
+    $("prog-phase").textContent = "Synthesizing…"; progStart = Date.now();
+    const sum = new Summarizer(provider, key);
+    const sweep = await runSweep(sum, topicPapers, setProgress);
+    // Carry fetch errors into the report as gaps.
+    topicPapers.forEach((t) => { if (t.fetchError) sweep.gaps.push(`${t.group}/${t.code}: fetch failed (${t.fetchError}).`); });
+
+    const meta = {
+      provider, model: sum.model,
+      inputTokens: sum.inputTokens, outputTokens: sum.outputTokens,
+      truncated,
+    };
+    prog.hidden = true;
+    resultsEl.innerHTML = buildReport(sweep, meta);
+    wireReport();
+    window.scrollTo(0, 0);
+  } catch (e) {
+    prog.hidden = true; cfg.hidden = false;
+    showError("Sweep failed: " + e.message);
+  }
+}
+
+// --- init (browser only) ---
+if (typeof document !== "undefined") {
+  cfg = $("config-screen"); prog = $("progress"); resultsEl = $("results");
+  buildTree();
+  applyDefaults();
+  loadKeyForProvider();
+  updateProviderSeg();
+  $("run").addEventListener("click", run);
+  $("sel-none").addEventListener("click", () => { $("tree").querySelectorAll("input[type=checkbox]").forEach((c) => (c.checked = false)); updateSelInfo(); });
+  $("sel-defaults").addEventListener("click", applyDefaults);
+  $("clear-key").addEventListener("click", () => { $("apikey").value = ""; lsDel(keyStorageId(currentProvider())); });
+  document.querySelectorAll('input[name="provider"]').forEach((r) => r.addEventListener("change", () => { updateProviderSeg(); loadKeyForProvider(); }));
+}
+
+// --- test hook (Node only) ---
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    parseAuthors, formatAuthorsApa, inTextCitation, familyName,
+    extractCitedIds, invalidCitations, stripInvalidTokens,
+    mkPaper, fetchCategory, catSlug, slugify, titleCase,
+    topicDistribution, sunburstSvg, mixHex, renderProse, buildReport,
+    deriveGroups, estimateCost, fmtCost, plural, esc,
+    BIORXIV_CATS, MEDRXIV_CATS,
+  };
+}
+
+})();
+</script>
+</body>
+</html>
