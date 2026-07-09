@@ -26,6 +26,7 @@
   .row{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;}
   input[type=text],input[type=password],input[type=number]{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);padding:9px 11px;border-radius:0;width:100%;}
   input[type=number]{width:88px;}
+  select{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line-strong);padding:9px 11px;border-radius:0;cursor:pointer;}
   .seg{display:inline-flex;border:1px solid var(--line-strong);}
   .seg label{padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink2);}
   .seg label.on{background:var(--ink);color:var(--bg);}
@@ -149,6 +150,15 @@
   </div>
 
   <div class="field">
+    <label>Model &amp; reasoning effort</label>
+    <div class="row">
+      <select id="model"></select>
+      <select id="effort" style="margin-left:10px;"></select>
+    </div>
+    <div class="hint" id="model-hint">Higher effort yields deeper syntheses but uses more tokens (Claude only).</div>
+  </div>
+
+  <div class="field">
     <label>Look-back window</label>
     <div class="row">
       <div><input type="number" id="weeks" min="1" max="12" value="1"> <span class="hint" style="display:inline;margin-left:6px;">week(s) back from today</span></div>
@@ -212,9 +222,13 @@ const MEDRXIV_CATS = [
 ];
 const SERVERS = [
   { id: "biorxiv", label: "bioRxiv", host: "www.biorxiv.org", cats: BIORXIV_CATS,
-    favorites: ["neuroscience","cell biology","genomics","bioinformatics","microbiology"] },
+    favorites: ["animal behavior and cognition","cell biology","developmental biology","epidemiology",
+      "genetics","molecular biology","pharmacology and toxicology","biochemistry","bioinformatics",
+      "cancer biology","clinical trials","evolutionary biology","genomics","neuroscience","pathology",
+      "physiology","systems biology"] },
   { id: "medrxiv", label: "medRxiv", host: "www.medrxiv.org", cats: MEDRXIV_CATS,
-    favorites: ["infectious diseases","epidemiology"] },
+    favorites: ["epidemiology","genetic and genomic medicine","hematology","neurology",
+      "obstetrics and gynecology","oncology","geriatric medicine","pharmacology and therapeutics"] },
 ];
 const titleCase = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
 const catSlug = (s) => s.replace(/ /g, "_");                 // API query param form
@@ -223,19 +237,43 @@ const slugify = (v) => (v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+
 // ======================================================================
 //  Models & config
 // ======================================================================
-const CLAUDE_MODEL = "claude-opus-4-8";
-const GEMINI_MODEL = "gemini-3.1-pro-preview";
-const MAX_TOKENS = 8000;
+// Output tokens are bounded only by each model's own hard ceiling (MODELS.maxOut),
+// requested on every synthesis call and streamed so a large ceiling can't hit an
+// idle-connection timeout. `max_tokens` is a ceiling, not a target, so requesting
+// the model maximum costs nothing extra on normal-length syntheses — the model
+// still stops at its natural end. No app-imposed output cap.
 const CITATION_RETRIES = 2;
 const PAGE_SIZE = 30;            // bioRxiv /details page size
-const MAX_PER_CATEGORY = 500;    // safety ceiling per topic
 const FETCH_CONCURRENCY = 3;     // polite parallelism across categories
 
-// Approximate USD per 1M tokens (input, output) — cover-page ESTIMATE only.
-const PRICING = {
-  "claude-opus-4-8": [5.0, 25.0],
-  "gemini-3.1-pro-preview": [2.0, 12.0],
+// Selectable models per provider. `price` is approximate USD per 1M tokens
+// (input, output) — cover-page ESTIMATE only. `maxOut` is the model's hard output
+// ceiling, requested on every synthesis call (see above). Claude models listed all
+// support adaptive thinking + the effort parameter (the request shape this app sends).
+const MODELS = {
+  claude: [
+    { id: "claude-opus-4-8", label: "Claude Opus 4.8", price: [5.0, 25.0], maxOut: 128000 },
+    { id: "claude-opus-4-7", label: "Claude Opus 4.7", price: [5.0, 25.0], maxOut: 128000 },
+    { id: "claude-sonnet-5", label: "Claude Sonnet 5", price: [3.0, 15.0], maxOut: 128000 },
+  ],
+  gemini: [
+    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", price: [2.0, 12.0], maxOut: 65536 },
+  ],
 };
+// Reasoning-effort levels (Claude only — Gemini has no effort control).
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+const DEFAULT_MODEL = { claude: "claude-opus-4-8", gemini: "gemini-3.1-pro-preview" };
+const DEFAULT_EFFORT = "medium";
+
+// Pricing map derived from MODELS, keyed by model id (used by estimateCost).
+const PRICING = {};
+for (const prov of Object.keys(MODELS)) for (const m of MODELS[prov]) PRICING[m.id] = m.price;
+
+// A model's hard output ceiling (falls back for an unknown/custom id).
+function modelMaxOut(id) {
+  for (const prov of Object.keys(MODELS)) for (const m of MODELS[prov]) if (m.id === id) return m.maxOut;
+  return 32000;
+}
 
 // ======================================================================
 //  Prompts — ported from arXiv Sweeper's prompts/*.txt, adapted to
@@ -348,7 +386,9 @@ async function fetchJson(url) {
   return r.json();
 }
 
-// Fetch every paper in [start,end] for one server+category, deduped by DOI (keep highest version).
+// Fetch EVERY paper in [start,end] for one server+category, deduped by DOI (keep
+// highest version). No per-category ceiling — pagination runs until the window is
+// exhausted (cursor reaches the API's reported total, or a page comes back empty).
 async function fetchCategory(server, categorySlug, start, end) {
   const base = `https://api.biorxiv.org/details/${server}/${start}/${end}`;
   const byDoi = new Map();
@@ -366,9 +406,11 @@ async function fetchCategory(server, categorySlug, start, end) {
       if (!prev || ver > prev._ver) byDoi.set(doi, mkPaper(x, ver));
     }
     cursor += PAGE_SIZE;
-    if (byDoi.size >= MAX_PER_CATEGORY) { truncated = true; break; }
     if (cursor >= total || coll.length === 0) break;
-    if (++guard > 400) break;   // hard backstop
+    // Runaway backstop only: normal termination is the line above. This trips
+    // solely if the API keeps serving non-empty pages past its own `total`
+    // (bad data) — in which case results are genuinely incomplete, so flag it.
+    if (++guard > Math.ceil((total || 0) / PAGE_SIZE) + 20) { truncated = true; break; }
   }
   return { papers: [...byDoi.values()], truncated };
 }
@@ -427,10 +469,12 @@ function stripInvalidTokens(text, valid) {
 }
 
 class Summarizer {
-  constructor(provider, apiKey) {
+  constructor(provider, apiKey, model, effort) {
     this.provider = provider;
     this.apiKey = apiKey;
-    this.model = provider === "gemini" ? GEMINI_MODEL : CLAUDE_MODEL;
+    this.model = model || (provider === "gemini" ? DEFAULT_MODEL.gemini : DEFAULT_MODEL.claude);
+    this.effort = effort || DEFAULT_EFFORT;
+    this.maxOut = modelMaxOut(this.model);
     this.inputTokens = 0;
     this.outputTokens = 0;
   }
@@ -450,18 +494,51 @@ class Summarizer {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: MAX_TOKENS,
+        max_tokens: this.maxOut,   // the model's own ceiling — no app-imposed cap
         thinking: { type: "adaptive" },
+        // Effort bounds thinking depth/cost (summarization, not deep reasoning).
+        output_config: { effort: this.effort },
+        stream: true,              // stream so a large ceiling can't idle-timeout
         messages: [{ role: "user", content: prompt }],
       }),
     });
     if (!r.ok) throw new Error(`Claude API ${r.status}: ${(await r.text()).slice(0, 300)}`);
-    const data = await r.json();
-    const u = data.usage || {};
-    this.inputTokens += u.input_tokens || 0;
-    this.outputTokens += u.output_tokens || 0;
-    const block = (data.content || []).find((b) => b.type === "text");
-    return ((block && block.text) || "").trim();
+    // Parse the SSE stream: accumulate text_delta, capture stop_reason and usage.
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "", text = "", stop = null, inTok = 0, outTok = 0;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+        let ev;
+        try { ev = JSON.parse(payload); } catch (e) { continue; }
+        if (ev.type === "message_start") inTok = (ev.message && ev.message.usage && ev.message.usage.input_tokens) || inTok;
+        else if (ev.type === "content_block_delta" && ev.delta && ev.delta.type === "text_delta") text += ev.delta.text || "";
+        else if (ev.type === "message_delta") {
+          if (ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+          if (ev.usage && ev.usage.output_tokens != null) outTok = ev.usage.output_tokens;
+        } else if (ev.type === "error") {
+          throw new Error(`Claude API stream error: ${JSON.stringify(ev.error || ev).slice(0, 200)}`);
+        }
+      }
+    }
+    this.inputTokens += inTok;
+    this.outputTokens += outTok;
+    text = text.trim();
+    // Only fails if the model's own hard ceiling was hit (an absurdly long synthesis)
+    // or nothing came back — surfaced loudly instead of a silently blank section.
+    if (!text || stop === "max_tokens") {
+      throw new Error(`Claude synthesis incomplete (stop_reason: ${stop || "no text"}). Lower the reasoning effort or narrow the sweep.`);
+    }
+    return text;
   }
 
   async _gemini(prompt) {
@@ -471,7 +548,7 @@ class Summarizer {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: MAX_TOKENS },
+        generationConfig: { maxOutputTokens: this.maxOut },   // model ceiling, no app cap
       }),
     });
     if (!r.ok) throw new Error(`Gemini API ${r.status}: ${(await r.text()).slice(0, 300)}`);
@@ -483,7 +560,11 @@ class Summarizer {
     this.outputTokens += Math.max(0, total_toks - prompt_toks);
     const cand = (data.candidates || [])[0];
     const parts = (cand && cand.content && cand.content.parts) || [];
-    return parts.map((p) => p.text || "").join("").trim();
+    const text = parts.map((p) => p.text || "").join("").trim();
+    if (!text || (cand && cand.finishReason === "MAX_TOKENS")) {
+      throw new Error(`Gemini synthesis incomplete (finishReason: ${cand ? cand.finishReason : "no text"}).`);
+    }
+    return text;
   }
 
   async generateWithCitations(prompt, valid) {
@@ -705,7 +786,7 @@ function buildReport(sweep, meta) {
   const totalTok = meta.inputTokens + meta.outputTokens;
   const tokens = totalTok ? `${totalTok.toLocaleString()} (${meta.inputTokens.toLocaleString()} in / ${meta.outputTokens.toLocaleString()} out)` : "";
   const cost = totalTok ? fmtCost(estimateCost(meta.model, meta.inputTokens, meta.outputTokens)) : "";
-  const truncated = meta.truncated.length ? `${meta.truncated.join(", ")} hit the ${MAX_PER_CATEGORY}-paper cap` : "";
+  const truncated = meta.truncated.length ? `${meta.truncated.join(", ")} may be incomplete (the API stopped paginating before its reported total)` : "";
   const chipCodes = [...new Set(topics.map((t) => t.topic.code))];
 
   const nav = groups.map((g) => `
@@ -867,6 +948,37 @@ function loadKeyForProvider() {
   }
 }
 
+function modelStorageId(provider) { return `biorxiv-sweeper-model-${provider}`; }
+const EFFORT_STORAGE = "biorxiv-sweeper-effort";
+const EFFORT_LABELS = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Max" };
+
+// Fill the model dropdown for the current provider, restoring the saved choice.
+function populateModels() {
+  const p = currentProvider();
+  const sel = $("model");
+  const saved = lsGet(modelStorageId(p)) || DEFAULT_MODEL[p];
+  sel.innerHTML = MODELS[p].map((m) => `<option value="${esc(m.id)}">${esc(m.label)}</option>`).join("");
+  sel.value = [...sel.options].some((o) => o.value === saved) ? saved : DEFAULT_MODEL[p];
+  updateEffortVisibility();
+}
+
+// Fill the effort dropdown, restoring the saved choice.
+function populateEffort() {
+  const sel = $("effort");
+  const saved = lsGet(EFFORT_STORAGE) || DEFAULT_EFFORT;
+  sel.innerHTML = EFFORTS.map((e) => `<option value="${e}">${EFFORT_LABELS[e] || e}</option>`).join("");
+  sel.value = EFFORTS.includes(saved) ? saved : DEFAULT_EFFORT;
+}
+
+// Effort applies to Claude only — hide it for Gemini.
+function updateEffortVisibility() {
+  const isClaude = currentProvider() === "claude";
+  $("effort").style.display = isClaude ? "" : "none";
+  $("model-hint").textContent = isClaude
+    ? "Higher effort yields deeper syntheses but uses more tokens."
+    : "Gemini has no reasoning-effort control.";
+}
+
 // Build category tree.
 function buildTree() {
   const tree = $("tree");
@@ -972,7 +1084,11 @@ async function run() {
   if (!key) { showError("Enter your API key first."); return; }
   const topics = selectedTopics();
   if (!topics.length) { showError("Select at least one subject area to sweep."); return; }
+  const model = $("model").value;
+  const effort = $("effort").value;
   lsSet(keyStorageId(provider), key);
+  lsSet(modelStorageId(provider), model);
+  lsSet(EFFORT_STORAGE, effort);
 
   const weeks = Math.max(1, Math.min(12, parseInt($("weeks").value, 10) || 1));
   const start = daysAgoISO(weeks * 7), end = todayISO();
@@ -990,7 +1106,7 @@ async function run() {
       catch (e) { logLine(`⚠ ${t.group}/${t.code}: fetch failed (${e.message})`); return { ...t, papers: [], fetchError: e.message }; }
       if (res.truncated) truncated.push(t.code);
       fetched += res.papers.length;
-      logLine(`✓ ${t.group}/${t.code}: ${res.papers.length} papers${res.truncated ? " (capped)" : ""}`);
+      logLine(`✓ ${t.group}/${t.code}: ${res.papers.length} papers${res.truncated ? " (may be incomplete)" : ""}`);
       $("prog-phase").textContent = `Fetching preprints… ${fetched} so far`;
       return { ...t, papers: res.papers };
     });
@@ -1000,7 +1116,7 @@ async function run() {
 
     // Summarize.
     $("prog-phase").textContent = "Synthesizing…"; progStart = Date.now();
-    const sum = new Summarizer(provider, key);
+    const sum = new Summarizer(provider, key, model, effort);
     const sweep = await runSweep(sum, topicPapers, setProgress);
     // Carry fetch errors into the report as gaps.
     topicPapers.forEach((t) => { if (t.fetchError) sweep.gaps.push(`${t.group}/${t.code}: fetch failed (${t.fetchError}).`); });
@@ -1026,12 +1142,16 @@ if (typeof document !== "undefined") {
   buildTree();
   applyDefaults();
   loadKeyForProvider();
+  populateModels();
+  populateEffort();
   updateProviderSeg();
   $("run").addEventListener("click", run);
   $("sel-none").addEventListener("click", () => { $("tree").querySelectorAll("input[type=checkbox]").forEach((c) => (c.checked = false)); updateSelInfo(); });
   $("sel-defaults").addEventListener("click", applyDefaults);
   $("clear-key").addEventListener("click", () => { $("apikey").value = ""; lsDel(keyStorageId(currentProvider())); });
-  document.querySelectorAll('input[name="provider"]').forEach((r) => r.addEventListener("change", () => { updateProviderSeg(); loadKeyForProvider(); }));
+  $("model").addEventListener("change", () => lsSet(modelStorageId(currentProvider()), $("model").value));
+  $("effort").addEventListener("change", () => lsSet(EFFORT_STORAGE, $("effort").value));
+  document.querySelectorAll('input[name="provider"]').forEach((r) => r.addEventListener("change", () => { updateProviderSeg(); loadKeyForProvider(); populateModels(); }));
 }
 
 // --- test hook (Node only) ---
